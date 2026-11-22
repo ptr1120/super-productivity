@@ -21,6 +21,10 @@
     <exclude
       domain="sharedpref"
       path="SuperProductivityLaunchUrl.xml" />
+    <!-- Keyed by device-assigned appWidgetIds; see backup_rules.xml. -->
+    <exclude
+      domain="sharedpref"
+      path="widget_list_selection.xml" />
   </cloud-backup>
   <device-transfer>
     <!-- A transferred fresh install should select launch mode from current state. -->
@@ -43,5 +47,9 @@
     <exclude
       domain="sharedpref"
       path="SuperProductivityLaunchUrl.xml" />
+    <!-- Keyed by device-assigned appWidgetIds; see backup_rules.xml. -->
+    <exclude
+      domain="sharedpref"
+      path="widget_list_selection.xml" />
   </device-transfer>
 </data-extraction-rules>

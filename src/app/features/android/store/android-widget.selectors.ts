@@ -13,6 +13,7 @@ import {
   selectTodayStr,
 } from '../../../root-store/app-state/app-state.selectors';
 import {
+  ANDROID_WIDGET_MAX_LIST_TASKS,
   AndroidWidgetCurrentTask,
   AndroidWidgetData,
   AndroidWidgetTask,
@@ -27,6 +28,7 @@ import { selectSectionsByContextIdMap } from '../../section/store/section.select
 import { groupTasksBySection } from '../../section/section.util';
 import { Section } from '../../section/section.model';
 import { TODAY_TAG } from '../../tag/tag.const';
+import { INBOX_PROJECT } from '../../project/project.const';
 import { getDeviceLabel } from '../../tracking-presence/get-device-label.util';
 import {
   PRESENCE_STALE_AFTER_MS,
@@ -231,6 +233,59 @@ export const selectAndroidWidgetData = createSelector(
       tasks,
       projectColors,
       currentTask: buildLocalCurrentTask(currentTaskId, taskEntities),
+    };
+  },
+);
+
+/** Open tasks in screen order (unsectioned, then per section), then done newest-first. */
+const orderProjectTasksLikeProjectScreen = (
+  taskIds: readonly string[],
+  taskEntities: Dictionary<Task>,
+  sections: readonly Section[],
+): Task[] => {
+  const tasks = taskIds.map((id) => taskEntities[id]).filter((t): t is Task => !!t);
+  const { dict, noSection } = groupTasksBySection(
+    tasks.filter((t) => !t.isDone),
+    sections,
+  );
+  return [
+    ...noSection,
+    ...sections.flatMap((section) => dict[section.id]),
+    ...sortDoneTasksByDoneDate(tasks.filter((t) => t.isDone)),
+  ];
+};
+
+/** The full `widget_data` blob: Today plus every selectable extra list. */
+export const selectAndroidWidgetPayload = createSelector(
+  selectAndroidWidgetData,
+  selectTaskEntities,
+  selectProjectFeatureState,
+  selectSectionsByContextIdMap,
+  (today, taskEntities, projectState, sectionsByContextId): AndroidWidgetData => {
+    const inboxProject = projectState.entities[INBOX_PROJECT.id];
+    const inboxColor = inboxProject?.theme?.primary;
+    // Capped: this blob is built and parsed for every user, even without an Inbox widget.
+    const inboxTasks = orderProjectTasksLikeProjectScreen(
+      inboxProject?.taskIds ?? [],
+      taskEntities,
+      sectionsByContextId.get(INBOX_PROJECT.id) ?? [],
+    )
+      .slice(0, ANDROID_WIDGET_MAX_LIST_TASKS)
+      .map(
+        (task): AndroidWidgetTask => ({
+          id: task.id,
+          title: task.title,
+          isDone: task.isDone,
+          projectId: INBOX_PROJECT.id,
+        }),
+      );
+    return {
+      ...today,
+      lists: { INBOX: inboxTasks },
+      projectColors: {
+        ...today.projectColors,
+        ...(inboxColor && inboxTasks.length ? { [INBOX_PROJECT.id]: inboxColor } : {}),
+      },
     };
   },
 );

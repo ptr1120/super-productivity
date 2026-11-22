@@ -38,4 +38,11 @@
   <exclude
     domain="sharedpref"
     path="SuperProductivityLaunchUrl.xml" />
+  <!--
+    Keyed by appWidgetId, which a restore reassigns: a restored selection would
+    apply to whichever widget now holds that id.
+  -->
+  <exclude
+    domain="sharedpref"
+    path="widget_list_selection.xml" />
 </full-backup-content>

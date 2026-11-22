@@ -45,6 +45,9 @@
   <!-- Device currently tracking it, e.g. "on Desktop"; %1$s is the device label -->
   <string name="widget_tracking_device">on %1$s</string>
   <string name="widget_add_task">Add task</string>
+  <string name="widget_list_picker_title">Choose list</string>
+  <string name="widget_list_inbox">Inbox</string>
+  <string name="widget_empty_inbox">No tasks in Inbox</string>
 
   <!-- Widget quick add (QuickAddActivity): a dialog over the home screen -->
   <string name="quick_add_title">New task</string>

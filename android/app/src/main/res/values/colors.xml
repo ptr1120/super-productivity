@@ -19,6 +19,8 @@
     <color name="widget_ink_muted">#8A000000</color>
     <color name="widget_separator">#1F000000</color>
     <color name="widget_brand">#8B4A9D</color>
+    <color name="widget_list_today">#6495ED</color>
+    <color name="widget_list_inbox">#90BBA5</color>
 
     <!-- Launcher shortcut icons (res/xml/shortcuts.xml): same blue as the
          launcher icon background so they read as part of the app. -->

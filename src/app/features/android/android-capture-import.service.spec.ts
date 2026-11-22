@@ -121,6 +121,34 @@ describe('AndroidCaptureImportService', () => {
     localStorage.removeItem(ANDROID_SHARE_RECEIPTS_KEY);
   });
 
+  it('adds a capture from the Inbox widget list to the Inbox project', async () => {
+    pending = JSON.stringify([
+      { v: 1, id, title: 'Inbox task', createdAt: 0, source: 'widget', list: 'INBOX' },
+    ]);
+    loaded.next(true);
+    expect(await service.importPending()).toBe(1);
+    expect(taskService.createNewTaskWithDefaults).toHaveBeenCalledOnceWith({
+      title: 'Inbox task',
+      id,
+      workContextType: WorkContextType.PROJECT,
+      workContextId: INBOX_PROJECT.id,
+    });
+    expect(addedTasks()[0].workContextType).toBe(WorkContextType.PROJECT);
+    expect(addedTasks()[0].workContextId).toBe(INBOX_PROJECT.id);
+  });
+
+  ['REMOVED_LIST', 'constructor'].forEach((list) => {
+    it(`falls back to Today for a capture with unknown list "${list}"`, async () => {
+      pending = JSON.stringify([
+        { v: 1, id, title: 'Task', createdAt: 0, source: 'widget', list },
+      ]);
+      loaded.next(true);
+      expect(await service.importPending()).toBe(1);
+      expect(addedTasks()[0].workContextType).toBe(WorkContextType.TAG);
+      expect(addedTasks()[0].workContextId).toBe(TODAY_TAG.id);
+    });
+  });
+
   it('waits for data load, creates the task with the capture id, then acknowledges', async () => {
     const imported = service.importPending();
     await Promise.resolve();

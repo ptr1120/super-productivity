@@ -1,5 +1,6 @@
 package com.superproductivity.superproductivity.widget
 
+import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.util.Log
 import android.view.inputmethod.EditorInfo
@@ -12,7 +13,8 @@ import com.superproductivity.superproductivity.R
 /**
  * The widget's "+": a small dialog over the home screen. The title goes to the
  * [CaptureInbox] like a share, so no WebView loads. The widget lists it at
- * once; the app adds it to Today (short syntax applied) when it next opens.
+ * once; the app adds it to the widget's selected [WidgetList] (short syntax
+ * applied) when it next opens.
  */
 class QuickAddActivity : AppCompatActivity() {
     private lateinit var input: EditText
@@ -38,7 +40,15 @@ class QuickAddActivity : AppCompatActivity() {
             return
         }
         val id = try {
-            CaptureInbox.forContext(this).add(title, CaptureInbox.SOURCE_WIDGET)
+            val appWidgetId = intent.getIntExtra(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID
+            )
+            CaptureInbox.forContext(this).add(
+                title,
+                CaptureInbox.SOURCE_WIDGET,
+                list = WidgetListStore.get(this, appWidgetId).id
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save quick add", e)
             // Keep the dialog open so the typed title is not lost.

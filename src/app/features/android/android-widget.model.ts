@@ -10,6 +10,13 @@
  */
 export const ANDROID_WIDGET_DATA_KEY = 'widget_data';
 
+/** Lists besides Today; native counterpart is the `WidgetList` enum. */
+export type AndroidWidgetExtraListId = 'INBOX';
+export type AndroidWidgetListId = 'TODAY' | AndroidWidgetExtraListId;
+
+/** Rows the widget can show; keep equal to MAX_TASKS in TaskListWidgetService.kt. */
+export const ANDROID_WIDGET_MAX_LIST_TASKS = 20;
+
 export interface AndroidWidgetTask {
   id: string;
   title: string;
@@ -68,7 +75,10 @@ export interface AndroidWidgetData {
    * it, and neither does unrelated state churn. (#9098)
    */
   validUntil: number;
+  /** Today's tasks; stays top-level so the addition of `lists` needs no `v` bump. */
   tasks: AndroidWidgetTask[];
+  /** Selectable lists besides Today. Absent in blobs written by older app versions. */
+  lists?: Record<AndroidWidgetExtraListId, AndroidWidgetTask[]>;
   projectColors: { [projectId: string]: string };
   /**
    * The task currently being tracked — on this device, or (SuperSync only) on a

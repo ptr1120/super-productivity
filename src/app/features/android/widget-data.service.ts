@@ -5,14 +5,14 @@ import { androidInterface } from './android-interface';
 import { ANDROID_WIDGET_DATA_KEY, AndroidWidgetData } from './android-widget.model';
 import {
   resolveRemoteCurrentTask,
-  selectAndroidWidgetData,
+  selectAndroidWidgetPayload,
 } from './store/android-widget.selectors';
 import { selectTaskEntities } from '../tasks/store/task.selectors';
 import { TrackingPresenceService } from '../tracking-presence/tracking-presence.service';
 import { DroidLog } from '../../core/log';
 
 /**
- * Pushes the current today-task snapshot to the native KeyValStore for the home
+ * Pushes the current task-list snapshot to the native KeyValStore for the home
  * screen widget. Dedupes against the last successfully pushed blob so every
  * trigger path (state change, pause, post-sync) can call it unconditionally.
  */
@@ -23,7 +23,7 @@ export class WidgetDataService {
   private _lastPushedJson: string | null = null;
 
   async pushCurrent(): Promise<void> {
-    const data = await firstValueFrom(this._store.select(selectAndroidWidgetData));
+    const data = await firstValueFrom(this._store.select(selectAndroidWidgetPayload));
     // The selector only knows about local tracking; when nothing is tracked here,
     // fall back to the last-known remote tracking-presence session (SuperSync
     // only) so the widget can still say "tracking on <device>".

@@ -23,7 +23,7 @@ import { DroidLog } from '../../../core/log';
 import { T } from '../../../t.const';
 import { HydrationStateService } from '../../../op-log/apply/hydration-state.service';
 import { DataInitStateService } from '../../../core/data-init/data-init-state.service';
-import { selectAndroidWidgetData } from './android-widget.selectors';
+import { selectAndroidWidgetPayload } from './android-widget.selectors';
 import { selectTaskEntities } from '../../tasks/store/task.selectors';
 import { Dictionary } from '@ngrx/entity';
 import { Task } from '../../tasks/task.model';
@@ -74,7 +74,7 @@ export class AndroidWidgetEffects {
     IS_ANDROID_WEB_VIEW &&
     createEffect(
       () =>
-        this._store.select(selectAndroidWidgetData).pipe(
+        this._store.select(selectAndroidWidgetPayload).pipe(
           filter(() => !this._hydrationState.isApplyingRemoteOps()),
           debounceTime(500),
           tap(() => this._widgetDataService.pushCurrent()),

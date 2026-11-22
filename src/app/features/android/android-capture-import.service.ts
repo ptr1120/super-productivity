@@ -18,13 +18,26 @@ import { DEFAULT_GLOBAL_CONFIG } from '../config/default-global-config.const';
 import { TaskSharedActions } from '../../root-store/meta/task-shared.actions';
 import { TODAY_TAG } from '../tag/tag.const';
 import { WorkContextType } from '../work-context/work-context.model';
+import { INBOX_PROJECT } from '../project/project.const';
+import { AndroidWidgetListId } from './android-widget.model';
 
 /** One entry of the native `CaptureInbox` (see CaptureInbox.kt). */
 export interface AndroidCapture {
   id: string;
   title: string;
   createdAt: number;
+  /** The widget list it was added from; absent on captures from older versions. */
+  list?: string;
 }
+
+/** Where a widget quick add lands, per widget list. */
+const CAPTURE_TARGETS: Record<
+  AndroidWidgetListId,
+  { workContextType: WorkContextType; workContextId: string }
+> = {
+  TODAY: { workContextType: WorkContextType.TAG, workContextId: TODAY_TAG.id },
+  INBOX: { workContextType: WorkContextType.PROJECT, workContextId: INBOX_PROJECT.id },
+};
 
 /** The native bridge methods backed by CaptureInbox.kt. */
 export interface AndroidCaptureInbox {
@@ -111,23 +124,26 @@ export class AndroidCaptureImportService {
         return parseCaptures(json);
       },
       isValid: () => true,
-      // As if typed into Today's add bar (short syntax on), only the id is
-      // fixed. Today, because the capture came from the Today widget, which
-      // shows it as pending until now (WidgetData.withPendingCaptures). Not
-      // the active work context: the import runs on whatever screen the app
-      // resumes on, which the user did not pick for the capture.
+      // As if typed into the add bar of the widget's list (short syntax on),
+      // only the id is fixed. That list shows it as pending until now
+      // (WidgetData.withPendingCaptures). Not the active work context: the
+      // import runs on whatever screen the app resumes on, which the user did
+      // not pick for the capture.
       createTask: (capture) => {
+        // hasOwn: a plain lookup would resolve e.g. "constructor" off the prototype.
+        const target =
+          capture.list && Object.hasOwn(CAPTURE_TARGETS, capture.list)
+            ? CAPTURE_TARGETS[capture.list as AndroidWidgetListId]
+            : CAPTURE_TARGETS.TODAY;
         const task = this._taskService.createNewTaskWithDefaults({
           title: capture.title,
           id: capture.id,
-          workContextType: WorkContextType.TAG,
-          workContextId: TODAY_TAG.id,
+          ...target,
         });
         this._store.dispatch(
           TaskSharedActions.addTask({
             task,
-            workContextId: TODAY_TAG.id,
-            workContextType: WorkContextType.TAG,
+            ...target,
             isAddToBacklog: false,
             isAddToBottom: false,
           }),

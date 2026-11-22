@@ -1,5 +1,6 @@
 package com.superproductivity.superproductivity.widget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -11,12 +12,19 @@ import com.superproductivity.superproductivity.R
 
 class TaskListWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
-        return TaskListRemoteViewsFactory(applicationContext)
+        return TaskListRemoteViewsFactory(
+            applicationContext,
+            intent.getIntExtra(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID
+            )
+        )
     }
 }
 
 private class TaskListRemoteViewsFactory(
-    private val context: Context
+    private val context: Context,
+    private val appWidgetId: Int
 ) : RemoteViewsService.RemoteViewsFactory {
 
     private var tasks: List<WidgetTask> = emptyList()
@@ -24,17 +32,22 @@ private class TaskListRemoteViewsFactory(
     override fun onCreate() {}
 
     override fun onDataSetChanged() {
+        val list = WidgetListStore.get(context, appWidgetId)
         val snapshot = try {
             val json = (context.applicationContext as App).keyValStore
                 .get(WidgetData.KEYVAL_KEY, "{}")
-            WidgetData.parse(json, WidgetDoneQueue.peek(context))
+            WidgetData.parse(json, WidgetDoneQueue.peek(context), list)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse widget data", e)
             emptyList()
         }
-        // Separate try: an unreadable inbox must not hide the snapshot's tasks.
+        // Separate try: an unreadable capture inbox must not hide the snapshot's tasks.
         tasks = try {
-            WidgetData.withPendingCaptures(snapshot, CaptureInbox.forContext(context).pendingJson())
+            WidgetData.withPendingCaptures(
+                snapshot,
+                CaptureInbox.forContext(context).pendingJson(),
+                list
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read pending quick adds", e)
             snapshot
@@ -109,6 +122,7 @@ private class TaskListRemoteViewsFactory(
 
     companion object {
         private const val TAG = "TaskListWidget"
+        // Keep equal to ANDROID_WIDGET_MAX_LIST_TASKS in android-widget.model.ts.
         private const val MAX_TASKS = 20
     }
 }

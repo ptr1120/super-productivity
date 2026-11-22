@@ -1,6 +1,7 @@
 import {
   buildLocalCurrentTask,
   getWidgetValidUntil,
+  selectAndroidWidgetPayload,
   resolveRemoteCurrentTask,
   selectAndroidWidgetData,
 } from './android-widget.selectors';
@@ -16,6 +17,10 @@ import { selectLaterTodayStructure } from '../../tasks/store/task.selectors';
 import { Section } from '../../section/section.model';
 import { TODAY_TAG } from '../../tag/tag.const';
 import { WorkContextType } from '../../work-context/work-context.model';
+import {
+  ANDROID_WIDGET_MAX_LIST_TASKS,
+  AndroidWidgetData,
+} from '../android-widget.model';
 
 describe('getWidgetValidUntil', () => {
   const HOUR = 60 * 60 * 1000;
@@ -63,6 +68,92 @@ describe('getWidgetValidUntil', () => {
         expect(logicalToday(validUntil, offset)).not.toBe(dayStr);
       }
     }
+  });
+});
+
+describe('selectAndroidWidgetPayload', () => {
+  const INBOX_ID = 'INBOX_PROJECT';
+  const today: AndroidWidgetData = {
+    v: 1,
+    dayStr: '2026-07-17',
+    validUntil: 1,
+    tasks: [{ id: 'today1', title: 'Today', isDone: false, projectId: 'p1' }],
+    projectColors: { p1: '#ff0000' },
+    currentTask: null,
+  };
+  const task = (id: string, partial: Partial<Task> = {}): Task =>
+    ({ id, title: id, isDone: false, projectId: INBOX_ID, ...partial }) as Task;
+  const projects = (taskIds: string[], primary?: string): any => ({
+    ids: [INBOX_ID],
+    entities: { [INBOX_ID]: { id: INBOX_ID, taskIds, theme: { primary } } },
+  });
+
+  it('should keep Today untouched and add the inbox list with its color', () => {
+    const result = selectAndroidWidgetPayload.projector(
+      today,
+      { a: task('a') },
+      projects(['a'], '#00ff00'),
+      new Map(),
+    );
+    expect(result.tasks).toEqual(today.tasks);
+    expect(result.lists?.INBOX).toEqual([
+      { id: 'a', title: 'a', isDone: false, projectId: INBOX_ID },
+    ]);
+    expect(result.projectColors).toEqual({ p1: '#ff0000', [INBOX_ID]: '#00ff00' });
+  });
+
+  it('should order unsectioned, sectioned, then done newest-first', () => {
+    const result = selectAndroidWidgetPayload.projector(
+      today,
+      {
+        inSection: task('inSection'),
+        open: task('open'),
+        oldDone: task('oldDone', { isDone: true, doneOn: 1 }),
+        newDone: task('newDone', { isDone: true, doneOn: 2 }),
+      },
+      projects(['inSection', 'oldDone', 'open', 'newDone']),
+      new Map([[INBOX_ID, [{ id: 's1', taskIds: ['inSection'] } as Section]]]),
+    );
+    expect(result.lists?.INBOX.map((t) => t.id)).toEqual([
+      'open',
+      'inSection',
+      'newDone',
+      'oldDone',
+    ]);
+  });
+
+  it('should cap the inbox at the widget row limit, keeping open tasks first', () => {
+    const ids = Array.from(
+      { length: ANDROID_WIDGET_MAX_LIST_TASKS + 5 },
+      (_, i) => `t${i}`,
+    );
+    const entities = Object.fromEntries(
+      ids.map((id, i) => [id, task(id, { isDone: i === 0, doneOn: 1 })]),
+    );
+    const inbox = selectAndroidWidgetPayload.projector(
+      today,
+      entities,
+      projects(ids),
+      new Map(),
+    ).lists?.INBOX;
+    expect(inbox?.length).toBe(ANDROID_WIDGET_MAX_LIST_TASKS);
+    expect(inbox?.[0].id).toBe('t1');
+    expect(inbox?.some((t) => t.isDone)).toBe(false);
+  });
+
+  it('should skip ids without an entity and tolerate a missing inbox project', () => {
+    expect(
+      selectAndroidWidgetPayload.projector(today, {}, projects(['gone']), new Map()).lists
+        ?.INBOX,
+    ).toEqual([]);
+    expect(
+      selectAndroidWidgetPayload.projector(
+        today,
+        {},
+        { ids: [], entities: {} } as any,
+        new Map(),
+      ).lists?.INBOX,
+    ).toEqual([]);
   });
 });
 

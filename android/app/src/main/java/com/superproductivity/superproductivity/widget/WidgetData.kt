@@ -72,13 +72,18 @@ object WidgetData {
      */
     fun parse(
         json: String,
-        pendingDoneTargets: Map<String, Boolean> = emptyMap()
+        pendingDoneTargets: Map<String, Boolean> = emptyMap(),
+        list: WidgetList = WidgetList.DEFAULT
     ): List<WidgetTask> {
         val root = JSONObject(json)
         if (root.optInt("v", -1) != SUPPORTED_VERSION) {
             return emptyList()
         }
-        val tasksArray = root.optJSONArray("tasks") ?: return emptyList()
+        // Today stays top-level so blobs from before `lists` existed keep rendering.
+        val tasksArray = (
+            if (list == WidgetList.TODAY) root.optJSONArray("tasks")
+            else root.optJSONObject("lists")?.optJSONArray(list.id)
+        ) ?: return emptyList()
         val projectColors = root.optJSONObject("projectColors")
         val result = mutableListOf<WidgetTask>()
         for (i in 0 until tasksArray.length()) {
@@ -103,17 +108,22 @@ object WidgetData {
     }
 
     /**
-     * Puts the title captures from [CaptureInbox.pendingJson] (widget quick adds)
-     * above the snapshot, newest first like the add bar's add-to-top. Not a Today
-     * rule mirrored natively: the app imports every title capture into Today by
-     * contract (AndroidCaptureImportService). The capture id becomes the task id,
-     * so one already in the snapshot (imported, not yet acknowledged) shows once.
+     * Puts [list]'s title captures from [CaptureInbox.pendingJson] (widget quick
+     * adds) above the snapshot, newest first like the add bar's add-to-top. A capture
+     * without a known list belongs to Today, as in AndroidCaptureImportService. The
+     * capture id becomes the task id, so one already in the snapshot (imported, not
+     * yet acknowledged) shows once.
      */
-    fun withPendingCaptures(tasks: List<WidgetTask>, capturesJson: String): List<WidgetTask> {
+    fun withPendingCaptures(
+        tasks: List<WidgetTask>,
+        capturesJson: String,
+        list: WidgetList = WidgetList.DEFAULT
+    ): List<WidgetTask> {
         val known = tasks.mapTo(HashSet()) { it.id }
         val captures = JSONArray(capturesJson)
         val pending = (0 until captures.length())
             .map { captures.getJSONObject(it) }
+            .filter { WidgetList.fromId(it.optString("list")) == list }
             .filter { it.getString("id") !in known }
             .map {
                 WidgetTask(

@@ -31,12 +31,16 @@ import java.util.UUID
  */
 class CaptureInbox(private val dir: File) {
 
-    /** @return the capture id; throws if the capture could not be stored. */
+    /**
+     * @param list [WidgetList.id] the task belongs to; absent means Today
+     * @return the capture id; throws if the capture could not be stored.
+     */
     fun add(
         title: String,
         source: String,
         createdAt: Long = System.currentTimeMillis(),
         id: String = UUID.randomUUID().toString(),
+        list: String? = null,
     ): String {
         val trimmed = title.trim()
         require(trimmed.isNotEmpty()) { "Blank capture title" }
@@ -51,6 +55,7 @@ class CaptureInbox(private val dir: File) {
                 .put("title", trimmed)
                 .put("source", source)
                 .put("createdAt", createdAt)
+            if (list != null) json.put("list", list)
             write(id, json)
         }
         return id

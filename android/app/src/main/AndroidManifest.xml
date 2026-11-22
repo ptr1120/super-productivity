@@ -135,6 +135,16 @@
       android:theme="@style/AppTheme.QuickAdd"
       android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
 
+    <!-- Not exported: only the widget's explicit PendingIntent starts it. -->
+    <activity
+      android:name=".widget.WidgetListPickerActivity"
+      android:excludeFromRecents="true"
+      android:exported="false"
+      android:label="@string/widget_list_picker_title"
+      android:noHistory="true"
+      android:taskAffinity=""
+      android:theme="@style/AppTheme.WidgetListPicker" />
+
     <!-- All new Super-Productivity main activity, based on Capacitor to support offline use -->
     <activity
       android:name=".CapacitorMainActivity"

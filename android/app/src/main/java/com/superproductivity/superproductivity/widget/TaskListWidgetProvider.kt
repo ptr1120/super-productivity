@@ -13,12 +13,13 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.superproductivity.superproductivity.App
+import com.superproductivity.superproductivity.AppShortcutActivity
 import com.superproductivity.superproductivity.CapacitorMainActivity
 import com.superproductivity.superproductivity.R
 
 /**
- * Home screen widget listing today's tasks from the `widget_data` KeyValStore
- * snapshot pushed by Angular. Checkbox taps enqueue the task ID in
+ * Home screen widget listing the selected [WidgetList] from the `widget_data`
+ * KeyValStore snapshot pushed by Angular. Checkbox taps enqueue the task ID in
  * [WidgetDoneQueue]; Angular drains the queue (instantly via the local drain
  * broadcast when alive, otherwise on next resume/cold start).
  */
@@ -30,6 +31,10 @@ class TaskListWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         updateAll(context, appWidgetManager, appWidgetIds)
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        WidgetListStore.remove(context, appWidgetIds)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -148,43 +153,63 @@ class TaskListWidgetProvider : AppWidgetProvider() {
          * does not ignore a widget with no cached views, it *replaces* them, so it would
          * install a header with no adapter and no click targets on any widget whose views
          * the system has dropped (an app upgrade clears them explicitly).
+         *
+         * @param scrollToTopWidgetId the widget whose list just changed: the kept scroll
+         * offset belongs to the previous list
          */
-        fun refreshAll(context: Context) {
+        fun refreshAll(context: Context, scrollToTopWidgetId: Int? = null) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val ids = widgetIds(context, appWidgetManager)
             // Every push reaches here; without a widget there is nothing to read for.
             if (ids.isEmpty()) {
                 return
             }
-            updateAll(context, appWidgetManager, ids)
+            updateAll(context, appWidgetManager, ids, scrollToTopWidgetId)
         }
 
         /** Rebuilds each passed widget, reading the header once for all of them. */
         private fun updateAll(
             context: Context,
             appWidgetManager: AppWidgetManager,
-            appWidgetIds: IntArray
+            appWidgetIds: IntArray,
+            scrollToTopWidgetId: Int? = null
         ) {
-            val (header, currentTask) = headerAndCurrentTask(context)
-            for (appWidgetId in appWidgetIds) {
-                updateWidget(context, appWidgetManager, appWidgetId, header, currentTask)
-            }
+            val (todayHeader, currentTask) = headerAndCurrentTask(context)
             // setRemoteAdapter alone does not re-invoke the factory's onDataSetChanged()
             // when the adapter intent is unchanged (it always is — same widget id, same
             // Uri), so the rows would otherwise be whatever the adapter last built.
+            // Must precede updateAppWidget: in the reverse order Android 16's Pixel
+            // launcher (API 36.1) keeps the old header and applies only the new rows.
             appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_task_list)
+            for (appWidgetId in appWidgetIds) {
+                updateWidget(
+                    context,
+                    appWidgetManager,
+                    appWidgetId,
+                    todayHeader,
+                    currentTask,
+                    isScrollToTop = appWidgetId == scrollToTopWidgetId
+                )
+            }
         }
 
         private fun updateWidget(
             context: Context,
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int,
-            header: CharSequence,
-            currentTask: WidgetCurrentTask?
+            todayHeader: CharSequence,
+            currentTask: WidgetCurrentTask?,
+            isScrollToTop: Boolean
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_task_list)
+            val list = WidgetListStore.get(context, appWidgetId)
 
-            views.setTextViewText(R.id.widget_header_title, header)
+            views.setImageViewResource(R.id.widget_header_icon, list.iconRes)
+            views.setTextViewText(
+                R.id.widget_header_title,
+                if (list.isDayBound) todayHeader else context.getString(list.titleRes)
+            )
+            views.setTextViewText(R.id.widget_empty, context.getString(list.emptyRes))
 
             if (currentTask != null) {
                 views.setViewVisibility(R.id.widget_tracking_row, View.VISIBLE)
@@ -206,6 +231,9 @@ class TaskListWidgetProvider : AppWidgetProvider() {
             }
             views.setRemoteAdapter(R.id.widget_task_list, serviceIntent)
             views.setEmptyView(R.id.widget_task_list, R.id.widget_empty)
+            if (isScrollToTop) {
+                views.setScrollPosition(R.id.widget_task_list, 0)
+            }
 
             // Single template for all row clicks (explicit component — needs no
             // manifest intent-filter entry). MUTABLE is required for fill-ins.
@@ -218,7 +246,7 @@ class TaskListWidgetProvider : AppWidgetProvider() {
             )
             views.setPendingIntentTemplate(R.id.widget_task_list, clickPendingIntent)
 
-            // Header tap → open app
+            // Tracking row tap → open app
             val openAppIntent = Intent(context, CapacitorMainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
@@ -226,16 +254,43 @@ class TaskListWidgetProvider : AppWidgetProvider() {
                 context, 0, openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_header, openAppPendingIntent)
-            views.setOnClickPendingIntent(R.id.widget_empty, openAppPendingIntent)
             views.setOnClickPendingIntent(R.id.widget_tracking_row, openAppPendingIntent)
+
+            // Header tap → the shown list. Via the shortcut trampoline, which forwards
+            // the deep link without reloading a running app's WebView.
+            val openListIntent = Intent(context, AppShortcutActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(list.appUri)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            val openListPendingIntent = PendingIntent.getActivity(
+                context, 0, openListIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_header, openListPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_empty, openListPendingIntent)
+
+            // Dropdown arrow → picker. Request code per widget: PendingIntents differing
+            // only in extras would otherwise collapse into one.
+            val pickerIntent = Intent(context, WidgetListPickerActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            views.setOnClickPendingIntent(
+                R.id.widget_list_picker,
+                PendingIntent.getActivity(
+                    context, appWidgetId, pickerIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
 
             // "+" → quick add dialog; the app itself stays closed.
             val quickAddIntent = Intent(context, QuickAddActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             }
             val quickAddPendingIntent = PendingIntent.getActivity(
-                context, 0, quickAddIntent,
+                context, appWidgetId, quickAddIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_add, quickAddPendingIntent)
